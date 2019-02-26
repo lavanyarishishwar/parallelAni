@@ -27,6 +27,13 @@ my $args  = GetOptions ("ext=s"    	=> \$ext,
 						"help"		=> \$help,
                         "out=s"     => \$out);
 my @fastas = <$dir/*.$ext>;
+my @names;
+foreach (@fastas){
+	my $this = `basename $_`;
+	$this =~ s/.$ext$//;
+	chomp $this;
+	push(@names, $this);
+}
 #@fastas = splice(@fastas, 0, 4);
 
 if($help > 0){
@@ -63,19 +70,12 @@ sub runDnaDiff{
 }
 sub printToFile{
 	open OUT, ">$out" or die "Cannot create $out: $!\n";
-	for(my $j=0; $j<@fastas; $j++){
-		my $fastas = $fastas[$j];
-		$fastas =~ s/^\.\.\/ref\///;
-		$fastas =~ s/\..*$//;
-		print OUT "\t$fastas";
-		#print STDERR "\t$ref";
+	for(my $j=0; $j<@names; $j++){
+		print OUT "\t$names[$j]";
 	}
-	#print STDERR "\n";
 	print OUT "\n";
 	for(my $i=0; $i<@fastas; $i++){
-		my $fasta = $fastas[$i];
-		$fasta =~ s/\..*$//;
-		print OUT "$fasta";
+		print OUT "$names[$i]";
 		for(my $j=0; $j<@fastas; $j++){
 			#$ani{$fastas[$i]}{$fastas[$j]} //= ".";
 			print "Checking for $fastas[$i]-$fastas[$j]\n";
@@ -120,3 +120,4 @@ while(@running > 0){
 	sleep(1);
 }
 threads->create( \&printToFile)->join;
+
