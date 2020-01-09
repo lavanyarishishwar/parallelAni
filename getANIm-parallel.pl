@@ -175,4 +175,4 @@ while(@running > 0){
 }
 threads->create( \&printToFile)->join;
 
-print STDERR "  [LOGMSG] : Complete job took: ".($end_run - $start_run)." sec\n";
+print STDERR "  [LOGMSG] : Complete job took: ".formatTime($end_run - $start_run)." sec\n";
