@@ -2,15 +2,25 @@
 #
 # Author: Lavanya Rishishwar
 # Creation Date  : 17th Sep 2014
-# Modified Date  : 19th Sep 2016
+# Modified Date  : 9th Jan 2020
 #
 #############################################################
 use strict;
 use Getopt::Long;
 use threads;
 use threads::shared;
+use File::Basename;
+
 #############################################################
-my $usage = "Parallel script for computing pairwise ANIm values.\nRequires mummer to be installed.\n\nUsage instructions:\n$0 [-out <output ANI matrix. Default:ani.txt>] [-ext <extension of the fasta files. Default:fasta>] [-threads <number of threads. Default: 10>] [-folder <Folder in which to look for file. Default: ./>] [-distance <FLAG. Prints distances (100-ani) instead of similarity>] [-help <FLAG. Prints the help>]\n";
+my $usage = "Parallel script for computing pairwise ANIm values.
+Requires mummer to be installed.\n
+Usage instructions:
+$0 [-out <output ANI matrix. Default:ani.txt>]
+\t[-ext <extension of the fasta files. Default:fasta>]
+\t[-threads <number of threads. Default: 10>]
+\t[-folder <Folder in which to look for file. Default: ./>]
+\t[-distance <FLAG. Prints distances (100-ani) instead of similarity>]
+\t[-help <FLAG. Prints the help>]\n";
 my $ext="fasta";          # Input Queries Folder
 my $out = "ani.txt"; # Output File
 my $threads = 10;
@@ -29,10 +39,8 @@ my $args  = GetOptions ("ext=s"    	=> \$ext,
 my @fastas = <$dir/*.$ext>;
 my @names;
 foreach (@fastas){
-	my $this = `basename $_`;
-	$this =~ s/.$ext$//;
-	chomp $this;
-	push(@names, $this);
+	my ($prefix, $dir, $suffix) =  fileparse($_, qr/\.[^.]*/);
+	push(@names, $prefix);
 }
 #@fastas = splice(@fastas, 0, 4);
 
@@ -50,10 +58,16 @@ if(@fastas == 0){
 sub runDnaDiff{
 	my ($ref, $query, $num) = @_;
 	my $this_start = time();
-	print "\n  [LOGMSG] : Comparing reference file: $ref with query file: $query\n";
+	
+	my ($prefix, $dir, $suffix) =  fileparse($ref, qr/\.[^.]*/);
+	my $refDName = $prefix;
+	($prefix, $dir, $suffix) =  fileparse($query, qr/\.[^.]*/);
+	my $queryDName = $prefix;
+	
+	print "  [LOGMSG] : Comparing reference file: $refDName with query file: $queryDName\n";
 	#my $rand = int(rand(1000));
 	#print "dnadiff -p temp-$$ $ref $query\n";
-	system("dnadiff -p temp-$$-$num $ref $query");
+	my $log = `dnadiff -p temp-$$-$num $ref $query 2>&1 > temp-$$-$num.log`;
 	my $ani = `head -19 temp-$$-$num.report | tail -1 | awk '{print \$2}'`;
 	`rm temp-$$-$num.*`;
 	chomp $ani;
@@ -64,9 +78,9 @@ sub runDnaDiff{
 	$ani = 100 - $ani if($getDistance > 0);
 	$ani{$ref}{$query} = $ani;
 	$ani{$query}{$ref} = $ani;
-	print STDERR "  [LOGMSG] : $ref-$query ANI = $ani{$ref}{$query}\n";
+	print STDERR "  [LOGMSG] : $refDName-$queryDName ANI = $ani{$ref}{$query}\n";
 	my $this_end = time();
-	print STDERR "  [LOGMSG] : This took: ".($this_end-$this_start)." sec\n";
+	print STDERR "  [LOGMSG] : $refDName-$queryDName comparison took: ".($this_end-$this_start)." sec\n";
 }
 sub printToFile{
 	open OUT, ">$out" or die "Cannot create $out: $!\n";
@@ -78,12 +92,47 @@ sub printToFile{
 		print OUT "$names[$i]";
 		for(my $j=0; $j<@fastas; $j++){
 			#$ani{$fastas[$i]}{$fastas[$j]} //= ".";
-			print "Checking for $fastas[$i]-$fastas[$j]\n";
 			print OUT "\t".$ani{$fastas[$i]}{$fastas[$j]};
 		}
 		print OUT "\n";
 	}
 	close OUT;
+}
+
+sub getEta{
+	my ($queueSize, $processedSoFar, $startTime) = @_;
+	$processedSoFar = 1 if($processedSoFar == 0);
+	my $eta = ($queueSize - $processedSoFar)*(time()-$startTime)/$processedSoFar;
+	return formatTime($eta);
+}
+
+sub formatTime{
+	my ($eta) = @_;
+	if($eta > 60*60*24){
+		my $days = int($eta/(60*60*24));
+		$eta = $eta % (60*60*24);
+		my $hours = int($eta / (60*60));
+		$eta = $eta % (60*60);
+		my $minutes = int($eta / 60);
+		$eta = $eta % 60;
+		$eta = sprintf("%0.1f", $eta);
+		return "$days days, $hours hours, $minutes minutes and $eta seconds"
+	} elsif($eta > 60*60){
+		my $hours = int($eta / (60*60));
+		$eta = $eta % (60*60);
+		my $minutes = int($eta / 60);
+		$eta = $eta % 60;
+		$eta = sprintf("%0.1f", $eta);
+		return "$hours hours, $minutes minutes and $eta seconds"
+	} elsif($eta > 60){
+		my $minutes = int($eta / 60);
+		$eta = $eta % 60;
+		$eta = sprintf("%0.1f", $eta);
+		return "$minutes minutes and $eta seconds"
+	} else {
+		$eta = sprintf("%0.1f", $eta);
+		return "$eta seconds";
+	}
 }
 #############################################################
 #my @ref = <../ref/*.$ext>;
@@ -99,6 +148,7 @@ for(my $i=0; $i<@fastas; $i++){
 }
 # start ani runs
 my $start_run = time();
+my $curr_time;
 for(my $i=0; $i < @queue; $i++){
 	my $this_start = time();
 	my $t = async{runDnaDiff($queue[$i][0],$queue[$i][1], $i)};
@@ -109,9 +159,13 @@ for(my $i=0; $i < @queue; $i++){
 		@running = threads->list(threads::running);
 		sleep(1);
 	}
+	$curr_time = time();
+	print STDERR "  [LOGMSG] : ".(@queue - $i)." comparisons remaining. Elapsed time = ".formatTime($curr_time-$start_run)."\n";
+	if($i > $threads){
+		print STDERR "  [LOGMSG] : Should finish in about ".getEta(scalar @queue, $i, $start_run)."\n";
+	}
 }
 my $end_run = time();
-print STDERR "Complete job took: ".($end_run - $start_run)." sec\n";
 my @running = threads->list(threads::running);
 while(@running > 0){
 	my @joinable = threads->list(threads::joinable);
@@ -121,3 +175,4 @@ while(@running > 0){
 }
 threads->create( \&printToFile)->join;
 
+print STDERR "  [LOGMSG] : Complete job took: ".($end_run - $start_run)." sec\n";
