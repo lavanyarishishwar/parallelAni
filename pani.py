@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Pastrami - Population scale haplotype copying script"""
+"""Script for calculating parallel ANI"""
 
 __author__ = "Lavanya Rishishwar"
-__copyright__ = "Copyright 2021, Andrew Conley, Lavanya Rishishwar"
+__copyright__ = "Copyright 2021, Lavanya Rishishwar"
 __credits__ = ["Lavanya Rishishwar"]
 __license__ = "GPL"
-__version__ = "0.1"
+__version__ = "1.1"
 __maintainer__ = "Lavanya Rishishwar"
 __email__ = "lavanyarishishwar@gmail.com"
 __status__ = "Development"
